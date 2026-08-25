@@ -137,7 +137,8 @@ resource "omada_network" "new" {
 
 // TestAccNetworkVLANCreate drives create → read of an L2-only purpose="vlan"
 // network. This exercises the web-API create path (not the Open API, which only
-// accepts interface/0/1). No Open API credentials are required.
+// accepts interface/0/1), while Open API credentials are still configured, per
+// the contract that network create requires them.
 func TestAccNetworkVLANCreate(t *testing.T) {
 	srv := newMockController(t)
 
@@ -145,7 +146,7 @@ func TestAccNetworkVLANCreate(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testProviderConfig(srv.URL) + `
+				Config: testProviderConfigOpenAPI(srv.URL) + `
 resource "omada_network" "vlan" {
   name           = "IoT-vlan"
   purpose        = "vlan"
@@ -161,6 +162,28 @@ resource "omada_network" "vlan" {
 				),
 			},
 			{ResourceName: "omada_network.vlan", ImportState: true, ImportStateVerify: true},
+		},
+	})
+}
+
+// TestAccNetworkVLANCreateRequiresOpenAPI guards the upstream contract: network
+// create fails when Open API credentials are not configured, regardless of
+// purpose.
+func TestAccNetworkVLANCreateRequiresOpenAPI(t *testing.T) {
+	srv := newMockController(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testProviderConfig(srv.URL) + `
+resource "omada_network" "vlan" {
+  name           = "IoT-vlan"
+  purpose        = "vlan"
+  vlan_id        = 99
+}`,
+				ExpectError: regexp.MustCompile(`needs Open API credentials`),
+			},
 		},
 	})
 }

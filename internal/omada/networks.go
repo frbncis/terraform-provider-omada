@@ -106,6 +106,10 @@ func networksPath(siteID string) string {
 // interruption between them can leave a network that exists but is not yet
 // fully configured. It will be reconciled on the next apply.
 func (c *Client) CreateNetwork(ctx context.Context, siteID string, fields map[string]any) (*Network, error) {
+	if !c.openAPIConfigured() {
+		return nil, fmt.Errorf("creating a network needs Open API credentials: %w", ErrOpenAPINotConfigured)
+	}
+
 	name, _ := fields["name"].(string)
 	if name == "" {
 		return nil, fmt.Errorf("creating network: name is required")
@@ -114,7 +118,8 @@ func (c *Client) CreateNetwork(ctx context.Context, siteID string, fields map[st
 	purpose, _ := fields["purpose"].(string)
 
 	// L2-only vlan networks are created on the web API, which accepts the full
-	// payload directly (no Open API credentials, no gateway/interface binding).
+	// payload directly (no gateway/interface binding). Open API credentials are
+	// still required, matching the contract that network create needs them.
 	if purpose == "vlan" {
 		if _, ok := fields["vlan"]; !ok {
 			return nil, fmt.Errorf("creating network %q: vlan is required", name)
@@ -127,10 +132,6 @@ func (c *Client) CreateNetwork(ctx context.Context, siteID string, fields map[st
 			return nil, fmt.Errorf("network %q was created but could not be read back: %w", name, err)
 		}
 		return created, nil
-	}
-
-	if !c.openAPIConfigured() {
-		return nil, fmt.Errorf("creating an interface network needs Open API credentials: %w", ErrOpenAPINotConfigured)
 	}
 
 	purposeCode, err := openAPIPurpose(fields["purpose"])
