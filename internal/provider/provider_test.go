@@ -122,11 +122,34 @@ func newMockController(t *testing.T) *httptest.Server {
 		defer mu.Unlock()
 		switch r.Method {
 		case http.MethodPost:
-			// The real controller refuses network create on the web API — it
-			// only exists on the Open API. Emulating that is the point: a
-			// provider that regressed to POSTing here would pass a permissive
-			// mock and fail on hardware.
-			writeEnvelope(w, -1005, "operation forbidden", nil)
+			var in map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			purpose, _ := in["purpose"].(string)
+			// The real controller refuses an L3 "interface" network create on
+			// the web API — it only exists on the Open API. Emulating that is
+			// the point: a provider that regressed to POSTing an interface
+			// network here would pass a permissive mock and fail on hardware.
+			// An L2-only "vlan" network, though, IS created on the web API.
+			if purpose != "vlan" {
+				writeEnvelope(w, -1005, "operation forbidden", nil)
+				return
+			}
+			if _, ok := in["vlan"]; !ok {
+				writeEnvelope(w, -1001, "Parameter [vlan] should not be empty", nil)
+				return
+			}
+			id := fmt.Sprintf("gen-%d", nextID)
+			nextID++
+			// Store the web API's representation: that is what a later GET on
+			// /setting/lan/networks returns. An L2 vlan network has no gateway
+			// subnet or LAN binding.
+			networks[id] = map[string]any{
+				"id": id, "name": in["name"], "purpose": "vlan",
+				"vlan": in["vlan"], "vlanType": 0, "application": 0,
+				"interfaceIds": []any{}, "igmpSnoopEnable": false,
+			}
+			// Create answers without an id, so the provider must find it by name.
+			writeEnvelope(w, 0, "Success.", nil)
 		default: // GET
 			data := make([]map[string]any, 0, len(networks))
 			for _, n := range networks {

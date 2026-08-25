@@ -134,3 +134,33 @@ resource "omada_network" "new" {
 		},
 	})
 }
+
+// TestAccNetworkVLANCreate drives create → read of an L2-only purpose="vlan"
+// network. This exercises the web-API create path (not the Open API, which only
+// accepts interface/0/1). No Open API credentials are required.
+func TestAccNetworkVLANCreate(t *testing.T) {
+	srv := newMockController(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testProviderConfig(srv.URL) + `
+resource "omada_network" "vlan" {
+  name           = "IoT-vlan"
+  purpose        = "vlan"
+  vlan_id        = 99
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("omada_network.vlan", "id"),
+					resource.TestCheckResourceAttr("omada_network.vlan", "name", "IoT-vlan"),
+					resource.TestCheckResourceAttr("omada_network.vlan", "purpose", "vlan"),
+					resource.TestCheckResourceAttr("omada_network.vlan", "vlan_id", "99"),
+					resource.TestCheckResourceAttr("omada_network.vlan", "site_id", "site-1"),
+				),
+			},
+			{ResourceName: "omada_network.vlan", ImportState: true, ImportStateVerify: true},
+		},
+	})
+}

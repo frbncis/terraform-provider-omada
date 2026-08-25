@@ -80,46 +80,67 @@ func networksPath(siteID string) string {
 //
 // NOTE: creating a brand-new "interface" network is not supported by this
 // endpoint on v6.2 controllers (the UI uses the Omada OpenAPI). See the README.
-// CreateNetwork creates a LAN network through the Open API.
+// CreateNetwork creates a LAN network.
 //
-// Create is the one network operation the web API will not do — POSTing to
-// /setting/lan/networks is rejected outright. It lives on the Open API instead:
+// Create is the one network operation the web API will not do for an
+// "interface" network — POSTing to /setting/lan/networks is rejected outright.
+// That lives on the Open API instead:
 //
 //	POST /openapi/v2/{omadacId}/sites/{site}/lan-networks
 //
-// (v1 exists too but demands a longer required-field list for no benefit.)
+// An L2-only "vlan" network, however, is created directly on the web API:
 //
-// **Only the four fields the endpoint requires are sent here**, and everything
-// else the practitioner configured is applied straight afterwards by the
-// ordinary web-API update. That split is deliberate. The two surfaces describe
-// a network differently — the Open API nests DHCP under `dhcpSettingsVO`, the
-// web API uses `dhcpSettings` — so translating the full configuration into Open
-// API shape would mean maintaining a second, largely untested mapping of every
-// field, and a mistake in it would land on a live VLAN. Creating a minimal
-// network and then updating it through the code path that is already exercised
-// on every apply is both less code and better tested.
+//	POST /sites/{site}/setting/lan/networks
+//
+// (the Open API's purpose field only accepts 0/1 = interface, so it cannot make
+// an L2-only vlan network). The two create paths therefore differ:
+//
+//   - "interface" → Open API seed (name/purpose/vlan/interfaceIds/gatewaySubnet),
+//     then the rest is applied via the web-API update (the split is deliberate:
+//     the Open API nests DHCP under dhcpSettingsVO, the web API uses
+//     dhcpSettings; translating the full config would mean maintaining a second,
+//     largely untested mapping, and a mistake would land on a live VLAN).
+//   - "vlan" → web API create with the full payload fieldsFrom already builds.
 //
 // The consequence worth knowing: creating a network is two calls, so an
 // interruption between them can leave a network that exists but is not yet
 // fully configured. It will be reconciled on the next apply.
 func (c *Client) CreateNetwork(ctx context.Context, siteID string, fields map[string]any) (*Network, error) {
-	if !c.openAPIConfigured() {
-		return nil, fmt.Errorf("creating a network needs Open API credentials: %w", ErrOpenAPINotConfigured)
-	}
-
 	name, _ := fields["name"].(string)
 	if name == "" {
 		return nil, fmt.Errorf("creating network: name is required")
 	}
 
-	purpose, err := openAPIPurpose(fields["purpose"])
+	purpose, _ := fields["purpose"].(string)
+
+	// L2-only vlan networks are created on the web API, which accepts the full
+	// payload directly (no Open API credentials, no gateway/interface binding).
+	if purpose == "vlan" {
+		if _, ok := fields["vlan"]; !ok {
+			return nil, fmt.Errorf("creating network %q: vlan is required", name)
+		}
+		if err := c.Do(ctx, "POST", networksPath(siteID), fields, nil); err != nil {
+			return nil, fmt.Errorf("creating network %q: %w", name, err)
+		}
+		created, err := c.getNetworkByName(ctx, siteID, name)
+		if err != nil {
+			return nil, fmt.Errorf("network %q was created but could not be read back: %w", name, err)
+		}
+		return created, nil
+	}
+
+	if !c.openAPIConfigured() {
+		return nil, fmt.Errorf("creating an interface network needs Open API credentials: %w", ErrOpenAPINotConfigured)
+	}
+
+	purposeCode, err := openAPIPurpose(fields["purpose"])
 	if err != nil {
 		return nil, fmt.Errorf("creating network %q: %w", name, err)
 	}
 
 	seed := map[string]any{
 		"name":            name,
-		"purpose":         purpose,
+		"purpose":         purposeCode,
 		"vlan":            fields["vlan"],
 		"igmpSnoopEnable": valueOr(fields, "igmpSnoopEnable", false),
 		"interfaceIds":    fields["interfaceIds"],
@@ -129,7 +150,7 @@ func (c *Client) CreateNetwork(ctx context.Context, siteID string, fields map[st
 		return nil, fmt.Errorf("creating network %q: vlan is required", name)
 	}
 	// Required whenever purpose is "interface" (-35930), which is every network
-	// this provider can currently create.
+	// this provider can currently create via the Open API.
 	if sub, _ := seed["gatewaySubnet"].(string); sub == "" {
 		return nil, fmt.Errorf("creating network %q: gateway_subnet is required", name)
 	}
