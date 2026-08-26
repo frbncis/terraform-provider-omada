@@ -48,6 +48,7 @@ type Network struct {
 	VLANID        int      `json:"vlan"`
 	VLANType      int      `json:"vlanType"`
 	Application   int      `json:"application"`
+	DeviceType    int      `json:"deviceType"`
 	GatewaySubnet string   `json:"gatewaySubnet"`
 	InterfaceIDs  []string `json:"interfaceIds"`
 

@@ -41,6 +41,7 @@ type networkResourceModel struct {
 	VLANID        types.Int64  `tfsdk:"vlan_id"`
 	VLANType      types.Int64  `tfsdk:"vlan_type"`
 	Application   types.Int64  `tfsdk:"application"`
+	DeviceType    types.Int64  `tfsdk:"device_type"`
 	GatewaySubnet types.String `tfsdk:"gateway_subnet"`
 	InterfaceIDs  types.List   `tfsdk:"interface_ids"`
 
@@ -117,6 +118,9 @@ func (r *networkResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"vlan_type":   i("VLAN type code."),
 			"application": i("Application code."),
+			// deviceType is the controller's "DHCP Server Device" tri-state:
+			// 0 = External Device, 3 = None, 1 = Gateway (interface networks).
+			"device_type": i("Controller device type / DHCP Server Device: 0 = External Device, 1 = Gateway (interface), 3 = None."),
 			"gateway_subnet": schema.StringAttribute{
 				MarkdownDescription: "Gateway IP + subnet in CIDR, e.g. `10.10.30.1/24`. Only for `interface` networks.",
 				Optional:            true, Computed: true,
@@ -201,6 +205,7 @@ func (r *networkResource) fieldsFrom(ctx context.Context, m networkResourceModel
 	}
 	putInt("vlanType", m.VLANType)
 	putInt("application", m.Application)
+	putInt("deviceType", m.DeviceType)
 	if !m.GatewaySubnet.IsNull() && !m.GatewaySubnet.IsUnknown() && m.GatewaySubnet.ValueString() != "" {
 		f["gatewaySubnet"] = m.GatewaySubnet.ValueString()
 	}
@@ -272,6 +277,7 @@ func (r *networkResource) apply(ctx context.Context, n *omada.Network, m *networ
 	m.VLANID = types.Int64Value(int64(n.VLANID))
 	m.VLANType = types.Int64Value(int64(n.VLANType))
 	m.Application = types.Int64Value(int64(n.Application))
+	m.DeviceType = types.Int64Value(int64(n.DeviceType))
 	m.GatewaySubnet = types.StringValue(n.GatewaySubnet)
 
 	m.Isolation = types.BoolValue(n.Isolation)

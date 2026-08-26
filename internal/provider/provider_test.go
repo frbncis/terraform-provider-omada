@@ -142,10 +142,13 @@ func newMockController(t *testing.T) *httptest.Server {
 			nextID++
 			// Store the web API's representation: that is what a later GET on
 			// /setting/lan/networks returns. An L2 vlan network has no gateway
-			// subnet or LAN binding.
+			// subnet or LAN binding. deviceType/application are echoed from the
+			// request (the controller persists them), defaulting to 0.
+			dt, _ := in["deviceType"].(float64)
+			app, _ := in["application"].(float64)
 			networks[id] = map[string]any{
 				"id": id, "name": in["name"], "purpose": "vlan",
-				"vlan": in["vlan"], "vlanType": 0, "application": 0,
+				"vlan": in["vlan"], "vlanType": 0, "application": app, "deviceType": dt,
 				"interfaceIds": []any{}, "igmpSnoopEnable": false,
 			}
 			// Create answers without an id, so the provider must find it by name.

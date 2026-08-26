@@ -203,3 +203,44 @@ resource "omada_network" "vlan" {
 		},
 	})
 }
+
+// TestAccNetworkDeviceType verifies the device_type (DHCP Server Device)
+// attribute round-trips: it maps to the controller's deviceType field
+// (0=External, 1=Gateway, 3=None).
+func TestAccNetworkDeviceType(t *testing.T) {
+	srv := newMockController(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testProviderConfigOpenAPI(srv.URL) + `
+resource "omada_network" "vlan" {
+  name        = "IoT-vlan"
+  purpose     = "vlan"
+  vlan_id     = 99
+  device_type = 3
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("omada_network.vlan", "id"),
+					resource.TestCheckResourceAttr("omada_network.vlan", "device_type", "3"),
+				),
+			},
+			{ResourceName: "omada_network.vlan", ImportState: true, ImportStateVerify: true},
+			{ // change to External Device
+				Config: testProviderConfigOpenAPI(srv.URL) + `
+resource "omada_network" "vlan" {
+  name        = "IoT-vlan"
+  purpose     = "vlan"
+  vlan_id     = 99
+  device_type = 0
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("omada_network.vlan", "device_type", "0"),
+				),
+			},
+		},
+	})
+}
