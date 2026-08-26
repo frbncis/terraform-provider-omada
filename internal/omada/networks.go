@@ -309,10 +309,22 @@ func (c *Client) UpdateNetwork(ctx context.Context, siteID, id string, fields ma
 	// Zero is not a guess — the Open API, which does return the field, reports
 	// `proto: 0` for every network on the site — and dropping the block instead
 	// is not an option: without it the controller answers `-1 General error`.
-	if v6, ok := cur["lanNetworkIpv6Config"].(map[string]any); ok {
-		if _, has := v6["proto"]; !has {
-			v6["proto"] = 0
-		}
+	// Some networks (L2-only `vlan`) omit the key entirely on GET, so build the
+	// block from scratch when it is absent rather than only filling in `proto`.
+	v6, ok := cur["lanNetworkIpv6Config"].(map[string]any)
+	if !ok {
+		v6 = map[string]any{"enable": 0}
+		cur["lanNetworkIpv6Config"] = v6
+	}
+	if _, has := v6["proto"]; !has {
+		v6["proto"] = 0
+	}
+
+	// The web-API PATCH also refuses the body when `dhcpSettings` is absent
+	// (`-1001 must not be null`). An L2-only `vlan` network has no DHCP server,
+	// so the GET omits the key; supply an empty object so the PATCH is accepted.
+	if _, has := cur["dhcpSettings"]; !has {
+		cur["dhcpSettings"] = map[string]any{"enable": false}
 	}
 
 	if err := c.Do(ctx, "PATCH", networksPath(siteID)+"/"+id, cur, nil); err != nil {
