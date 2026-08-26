@@ -17,7 +17,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 
 	"github.com/wncservices/terraform-provider-omada/internal/omada"
 )
@@ -41,7 +44,7 @@ type networkResourceModel struct {
 	VLANID        types.Int64  `tfsdk:"vlan_id"`
 	VLANType      types.Int64  `tfsdk:"vlan_type"`
 	Application   types.Int64  `tfsdk:"application"`
-	DeviceType    types.Int64  `tfsdk:"device_type"`
+	DeviceType    types.String `tfsdk:"device_type"`
 	GatewaySubnet types.String `tfsdk:"gateway_subnet"`
 	InterfaceIDs  types.List   `tfsdk:"interface_ids"`
 
@@ -78,6 +81,38 @@ type dhcpOptionModel struct {
 	Code  types.Int64  `tfsdk:"code"`
 	Type  types.Int64  `tfsdk:"type"`
 	Value types.String `tfsdk:"value"`
+}
+
+// deviceTypeToController maps the device_type string enum to the controller's
+// deviceType integer (0=External Device, 1=Gateway, 2=Switch, 3=None).
+func deviceTypeToController(s string) (int64, bool) {
+	switch s {
+	case "external_device":
+		return 0, true
+	case "gateway":
+		return 1, true
+	case "switch":
+		return 2, true
+	case "none":
+		return 3, true
+	default:
+		return 0, false
+	}
+}
+
+// controllerToDeviceType maps the controller's deviceType integer back to the
+// device_type string enum. Unknown values fall back to "external_device".
+func controllerToDeviceType(v int) string {
+	switch v {
+	case 1:
+		return "gateway"
+	case 2:
+		return "switch"
+	case 3:
+		return "none"
+	default:
+		return "external_device"
+	}
 }
 
 func (r *networkResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -119,8 +154,14 @@ func (r *networkResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"vlan_type":   i("VLAN type code."),
 			"application": i("Application code."),
 			// deviceType is the controller's "DHCP Server Device" tri-state:
-			// 0 = External Device, 3 = None, 1 = Gateway (interface networks).
-			"device_type": i("Controller device type / DHCP Server Device: 0 = External Device, 1 = Gateway (interface), 3 = None."),
+			// 0=External Device, 1=Gateway, 2=Switch, 3=None.
+			"device_type": schema.StringAttribute{
+				MarkdownDescription: "DHCP Server Device: `external_device`, `gateway`, `switch`, or `none`.",
+				Optional:            true, Computed: true,
+				Validators: []validator.String{
+					stringvalidator.OneOf("external_device", "gateway", "switch", "none"),
+				},
+			},
 			"gateway_subnet": schema.StringAttribute{
 				MarkdownDescription: "Gateway IP + subnet in CIDR, e.g. `10.10.30.1/24`. Only for `interface` networks.",
 				Optional:            true, Computed: true,
@@ -205,7 +246,11 @@ func (r *networkResource) fieldsFrom(ctx context.Context, m networkResourceModel
 	}
 	putInt("vlanType", m.VLANType)
 	putInt("application", m.Application)
-	putInt("deviceType", m.DeviceType)
+	if !m.DeviceType.IsNull() && !m.DeviceType.IsUnknown() {
+		if v, ok := deviceTypeToController(m.DeviceType.ValueString()); ok {
+			f["deviceType"] = v
+		}
+	}
 	if !m.GatewaySubnet.IsNull() && !m.GatewaySubnet.IsUnknown() && m.GatewaySubnet.ValueString() != "" {
 		f["gatewaySubnet"] = m.GatewaySubnet.ValueString()
 	}
@@ -277,7 +322,7 @@ func (r *networkResource) apply(ctx context.Context, n *omada.Network, m *networ
 	m.VLANID = types.Int64Value(int64(n.VLANID))
 	m.VLANType = types.Int64Value(int64(n.VLANType))
 	m.Application = types.Int64Value(int64(n.Application))
-	m.DeviceType = types.Int64Value(int64(n.DeviceType))
+	m.DeviceType = types.StringValue(controllerToDeviceType(n.DeviceType))
 	m.GatewaySubnet = types.StringValue(n.GatewaySubnet)
 
 	m.Isolation = types.BoolValue(n.Isolation)

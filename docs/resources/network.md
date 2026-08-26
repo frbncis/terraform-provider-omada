@@ -17,25 +17,25 @@ Unset attributes keep their current controller value, and derived fields (addres
 
 ```terraform
 # DHCP Server Device — the network's "DHCP Server Device" setting is driven by
-# `device_type`. Supported values: 0 = External Device, 1 = Gateway, 3 = None.
+# `device_type`. Supported values: external_device, gateway, switch, none.
 
-# None — no DHCP server on this L2-only VLAN (addresses served elsewhere).
+# none — no DHCP server on this L2-only VLAN (addresses served elsewhere).
 resource "omada_network" "vlan_dhcp_none" {
   name        = "IOT"
   purpose     = "vlan"
   vlan_id     = 30
-  device_type = 3
+  device_type = "none"
 }
 
-# External Device — an upstream/external DHCP server serves this VLAN.
+# external_device — an upstream/external DHCP server serves this VLAN.
 resource "omada_network" "vlan_dhcp_external" {
   name        = "Guest"
   purpose     = "vlan"
   vlan_id     = 40
-  device_type = 0
+  device_type = "external_device"
 }
 
-# Gateway — the Omada gateway is the DHCP server (a routed interface network).
+# gateway — the Omada gateway is the DHCP server (a routed interface network).
 resource "omada_network" "vlan_dhcp_gateway" {
   name           = "Home"
   purpose        = "interface"
@@ -44,7 +44,7 @@ resource "omada_network" "vlan_dhcp_gateway" {
   dhcp_enabled   = true
   dhcp_start     = "10.10.50.100"
   dhcp_end       = "10.10.50.250"
-  device_type    = 1
+  device_type    = "gateway"
 }
 ```
 
@@ -62,7 +62,7 @@ resource "omada_network" "vlan_dhcp_gateway" {
 - `all_lan` (Boolean) Applies to all LANs.
 - `application` (Number) Application code.
 - `arp_detection_enable` (Boolean) ARP inspection/detection.
-- `device_type` (Number) Controller device type / DHCP Server Device: 0 = External Device, 1 = Gateway (interface), 3 = None.
+- `device_type` (String) DHCP Server Device: `external_device`, `gateway`, `switch`, or `none`.
 - `dhcp_dns_mode` (String) DHCP DNS mode, e.g. `auto`.
 - `dhcp_enabled` (Boolean) Enable the DHCP server on this network.
 - `dhcp_end` (String) Last address of the DHCP pool.
