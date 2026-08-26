@@ -176,6 +176,7 @@ func (p *OmadaProvider) DataSources(_ context.Context) []func() datasource.DataS
 func (p *OmadaProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewNetworkResource,
+		NewLanNetworkResource,
 		NewLanDNSResource,
 		NewPortForwardResource,
 		NewIPGroupResource,

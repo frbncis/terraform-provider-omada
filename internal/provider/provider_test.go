@@ -234,6 +234,79 @@ func newMockController(t *testing.T) *httptest.Server {
 		}
 	})
 
+	// V3 / networks (check → confirm) workflow, used by omada_lan_network.
+	// Dedicated store so it does not clash with the web-API `networks` map above.
+	lanNets := map[string]map[string]any{}
+	lanNext := 100
+	const v3Base = "/openapi/v3/abc123/sites/site-1/lan-networks"
+	const netCheck = "/openapi/v1/abc123/sites/site-1/networks/check"
+	const netConfirm = "/openapi/v1/abc123/sites/site-1/networks/confirm"
+
+	mux.HandleFunc("/openapi/v1/abc123/sites/site-1/networks/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "AccessToken=oa-token" {
+			writeEnvelope(w, -44116, "Open API Authorized failed", nil)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.URL.Path == netCheck && r.Method == http.MethodPost:
+			// create check: validate gateway deviceType semantics
+			var in map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			ln := in["lanNetwork"].(map[string]any)
+			dt := int(ln["deviceType"].(float64))
+			if dt == 1 && (ln["gatewaySubnet"] == nil || ln["gatewaySubnet"] == "") {
+				writeEnvelope(w, -35930, "When Purpose is set to Interface, gatewaySubnet cannot be null.", nil)
+				return
+			}
+			writeEnvelope(w, 0, "Success.", nil)
+		case r.URL.Path == netConfirm && r.Method == http.MethodPost:
+			var in map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			ln := in["lanNetwork"].(map[string]any)
+			id := fmt.Sprintf("gen-%d", lanNext)
+			lanNext++
+			lanNets[id] = map[string]any{
+				"id": id, "site": ln["site"], "name": ln["name"],
+				"purpose": ln["purpose"], "vlanType": ln["vlanType"], "vlan": ln["vlan"],
+				"deviceType": ln["deviceType"], "igmpSnoopEnable": ln["igmpSnoopEnable"],
+				"dhcpSettings": ln["dhcpSettings"], "application": 1,
+			}
+			writeEnvelope(w, 0, "Success.", map[string]any{"networkIdList": []string{id}})
+		case strings.HasSuffix(r.URL.Path, "/check") && r.Method == http.MethodPost:
+			writeEnvelope(w, 0, "Success.", nil)
+		case strings.HasSuffix(r.URL.Path, "/confirm") && r.Method == http.MethodPut:
+			var in map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			ln := in["lanNetwork"].(map[string]any)
+			id := pathpkg.Base(pathpkg.Dir(r.URL.Path))
+			if cur, ok := lanNets[id]; ok {
+				for k, v := range ln {
+					cur[k] = v
+				}
+				lanNets[id] = cur
+			}
+			writeEnvelope(w, 0, "Success.", nil)
+		default:
+			writeEnvelope(w, -1600, "Unsupported request path.", nil)
+		}
+	})
+
+	mux.HandleFunc(v3Base, func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "AccessToken=oa-token" {
+			writeEnvelope(w, -44116, "Open API Authorized failed", nil)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		data := make([]map[string]any, 0, len(lanNets))
+		for _, n := range lanNets {
+			data = append(data, n)
+		}
+		writeEnvelope(w, 0, "Success.", map[string]any{"totalRows": len(data), "data": data})
+	})
+
 	// Stateful LAN DNS store. Create returns a null result (like the real
 	// controller), so the client resolves the new record by name via GET.
 	dns := map[string]map[string]any{}
