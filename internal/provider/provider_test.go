@@ -244,6 +244,12 @@ func newMockController(t *testing.T) *httptest.Server {
 					return
 				}
 			}
+			// PATCH also refuses the body when dhcpSettings is absent, which is
+			// exactly what a vlan (L2-only) read-back produces.
+			if _, has := in["dhcpSettings"]; !has {
+				writeEnvelope(w, -1001, "Parameter [dhcpSettings] should not be null.", nil)
+				return
+			}
 			cur := networks[id]
 			if cur == nil {
 				cur = map[string]any{}

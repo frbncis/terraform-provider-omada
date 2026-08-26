@@ -162,6 +162,22 @@ resource "omada_network" "vlan" {
 				),
 			},
 			{ResourceName: "omada_network.vlan", ImportState: true, ImportStateVerify: true},
+			{ // update: change vlan_id and turn on IGMP snooping. The mock's PATCH
+				// enforces the dhcpSettings/proto requirements, so this step proves
+				// the provider supplies those defaults for an L2-only vlan network.
+				Config: testProviderConfigOpenAPI(srv.URL) + `
+resource "omada_network" "vlan" {
+  name    = "IoT-vlan"
+  purpose = "vlan"
+  vlan_id = 100
+  igmp_snoop_enable = true
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("omada_network.vlan", "vlan_id", "100"),
+					resource.TestCheckResourceAttr("omada_network.vlan", "igmp_snoop_enable", "true"),
+				),
+			},
 		},
 	})
 }
