@@ -120,11 +120,20 @@ func (c *Client) CreateNetwork(ctx context.Context, siteID string, fields map[st
 	// L2-only vlan networks are created on the web API, which accepts the full
 	// payload directly (no gateway/interface binding). Open API credentials are
 	// still required, matching the contract that network create needs them.
+	// The web API rejects the body unless igmpSnoopEnable is present, so seed
+	// it with a default when the practitioner did not set it.
 	if purpose == "vlan" {
 		if _, ok := fields["vlan"]; !ok {
 			return nil, fmt.Errorf("creating network %q: vlan is required", name)
 		}
-		if err := c.Do(ctx, "POST", networksPath(siteID), fields, nil); err != nil {
+		payload := make(map[string]any, len(fields)+1)
+		for k, v := range fields {
+			payload[k] = v
+		}
+		if _, ok := payload["igmpSnoopEnable"]; !ok {
+			payload["igmpSnoopEnable"] = false
+		}
+		if err := c.Do(ctx, "POST", networksPath(siteID), payload, nil); err != nil {
 			return nil, fmt.Errorf("creating network %q: %w", name, err)
 		}
 		created, err := c.getNetworkByName(ctx, siteID, name)
