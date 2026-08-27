@@ -71,3 +71,75 @@ resource "omada_lan_network" "vlan" {
 		},
 	})
 }
+
+// TestAccLanNetworkGatewayDHCPServer covers the gateway as the DHCP server
+// device: create with dhcp_settings, then toggle DHCP off (pool is dropped by
+// the mock when disabled), verifying the read-back round-trips.
+func TestAccLanNetworkGatewayDHCPServer(t *testing.T) {
+	srv := newMockController(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{ // create: device_type gateway with a gateway_subnet + DHCP pool
+				Config: testProviderConfigOpenAPI(srv.URL) + `
+resource "omada_lan_network" "gw" {
+  name           = "mgmt"
+  vlan_id        = 150
+  device_type    = "gateway"
+  gateway_subnet = "192.168.50.1/24"
+  dhcp_enabled   = true
+  dhcp_start     = "192.168.50.10"
+  dhcp_end       = "192.168.50.200"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("omada_lan_network.gw", "id"),
+					resource.TestCheckResourceAttr("omada_lan_network.gw", "device_type", "gateway"),
+					resource.TestCheckResourceAttr("omada_lan_network.gw", "gateway_subnet", "192.168.50.1/24"),
+					resource.TestCheckResourceAttr("omada_lan_network.gw", "dhcp_enabled", "true"),
+					resource.TestCheckResourceAttr("omada_lan_network.gw", "dhcp_start", "192.168.50.10"),
+					resource.TestCheckResourceAttr("omada_lan_network.gw", "dhcp_end", "192.168.50.200"),
+				),
+			},
+			{ // update: disable DHCP (in-place)
+				Config: testProviderConfigOpenAPI(srv.URL) + `
+resource "omada_lan_network" "gw" {
+  name           = "mgmt"
+  vlan_id        = 150
+  device_type    = "gateway"
+  gateway_subnet = "192.168.50.1/24"
+  dhcp_enabled   = false
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("omada_lan_network.gw", "dhcp_enabled", "false"),
+					resource.TestCheckResourceAttr("omada_lan_network.gw", "dhcp_start", ""),
+					resource.TestCheckResourceAttr("omada_lan_network.gw", "dhcp_end", ""),
+				),
+			},
+		},
+	})
+}
+
+// TestAccLanNetworkGatewaySubnetRequired verifies device_type=gateway without
+// a gateway_subnet is rejected at plan time.
+func TestAccLanNetworkGatewaySubnetRequired(t *testing.T) {
+	srv := newMockController(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testProviderConfigOpenAPI(srv.URL) + `
+resource "omada_lan_network" "gw" {
+  name        = "mgmt"
+  vlan_id     = 150
+  device_type = "gateway"
+}
+`,
+				ExpectError: regexp.MustCompile("Missing gateway subnet"),
+			},
+		},
+	})
+}

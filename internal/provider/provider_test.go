@@ -271,7 +271,8 @@ func newMockController(t *testing.T) *httptest.Server {
 				"id": id, "site": ln["site"], "name": ln["name"],
 				"purpose": ln["purpose"], "vlanType": ln["vlanType"], "vlan": ln["vlan"],
 				"deviceType": ln["deviceType"], "igmpSnoopEnable": ln["igmpSnoopEnable"],
-				"dhcpSettings": ln["dhcpSettings"], "application": 1,
+				"gatewaySubnet": ln["gatewaySubnet"], "dhcpSettings": ln["dhcpSettings"],
+				"application": 1,
 			}
 			writeEnvelope(w, 0, "Success.", map[string]any{"networkIdList": []string{id}})
 		case strings.HasSuffix(r.URL.Path, "/check") && r.Method == http.MethodPost:
