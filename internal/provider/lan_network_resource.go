@@ -73,7 +73,7 @@ func (r *lanNetworkResource) Metadata(_ context.Context, req resource.MetadataRe
 
 func (r *lanNetworkResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages a LAN network (VLAN) on the Omada controller via the V3 Open API workflow (check → confirm), including the DHCP Server Device (`device_type`).",
+		MarkdownDescription: "Manage a wired LAN network based on 802.1Q on the Omada Controller. Optionally select a device to serve as the DHCP Server.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Controller-assigned network ID.",
