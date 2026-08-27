@@ -38,15 +38,13 @@ type lanNetworkResourceModel struct {
 	DHCPEnd       types.String `tfsdk:"dhcp_end"`
 }
 
-// deviceType→controller mapping (0=External,1=Gateway,2=Switch,3=None).
+// deviceType→controller mapping (0=External,1=Gateway,3=None).
 func lanNetworkDeviceTypeToController(s string) (int64, bool) {
 	switch s {
 	case "external_device":
 		return 0, true
 	case "gateway":
 		return 1, true
-	case "switch":
-		return 2, true
 	case "none":
 		return 3, true
 	default:
@@ -58,8 +56,6 @@ func lanNetworkControllerToDeviceType(v int) string {
 	switch v {
 	case 1:
 		return "gateway"
-	case 2:
-		return "switch"
 	case 3:
 		return "none"
 	default:
@@ -92,12 +88,12 @@ func (r *lanNetworkResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"name":    schema.StringAttribute{Required: true, MarkdownDescription: "Network name."},
 			"vlan_id": schema.Int64Attribute{Required: true, MarkdownDescription: "VLAN ID (1-4094)."},
 			"device_type": schema.StringAttribute{
-				MarkdownDescription: "DHCP Server Device: `external_device`, `gateway`, `switch`, or `none`.",
+				MarkdownDescription: "DHCP Server Device: `external_device`, `gateway`, or `none`.",
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("external_device"),
 				Validators: []validator.String{
-					stringvalidator.OneOf("external_device", "gateway", "switch", "none"),
+					stringvalidator.OneOf("external_device", "gateway", "none"),
 				},
 			},
 			"gateway_subnet": schema.StringAttribute{

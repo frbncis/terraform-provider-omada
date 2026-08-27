@@ -51,7 +51,7 @@ o
 
 ### Optional
 
-- `device_type` (String) DHCP Server Device: `external_device`, `gateway`, `switch`, or `none`.
+- `device_type` (String) DHCP Server Device: `external_device`, `gateway`, or `none`.
 - `dhcp_enabled` (Boolean) Enable the DHCP server on this network. Only effective when `device_type` is `gateway`.
 - `dhcp_end` (String) Last address of the DHCP pool.
 - `dhcp_start` (String) First address of the DHCP pool.
